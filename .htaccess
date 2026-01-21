@@ -1,0 +1,13 @@
+# Tentativa de desabilitar ModSecurity se o provedor permitir
+<IfModule mod_security.c>
+  SecFilterEngine Off
+  SecFilterScanPOST Off
+</IfModule>
+
+# Garantir que POST seja permitido no api.php
+<Files "api.php">
+    <Limit GET POST OPTIONS>
+        Order allow,deny
+        Allow from all
+    </Limit>
+</Files>

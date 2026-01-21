@@ -1,10 +1,10 @@
 <?php
 /**
- * api.php - Versão Minimalista para Compatibilidade Máxima
+ * api.php - Versão de Compatibilidade Máxima (Form-Data)
  */
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=utf-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
@@ -21,7 +21,6 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ]);
 
-    // Criação silenciosa da tabela
     $pdo->exec("CREATE TABLE IF NOT EXISTS access_insight_workspaces (
         workspace_id VARCHAR(100) PRIMARY KEY,
         data_json LONGTEXT NOT NULL,
@@ -29,8 +28,18 @@ try {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $json = file_get_contents('php://input');
-        if (empty($json)) throw new Exception("Payload vazio");
+        // Tenta ler do $_POST['data'] primeiro (mais seguro contra 403)
+        $json = isset($_POST['data']) ? $_POST['data'] : file_get_contents('php://input');
+        
+        if (empty($json)) {
+             throw new Exception("Nenhum dado recebido");
+        }
+
+        // Valida se é um JSON válido antes de salvar
+        json_decode($json);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception("Formato de dados inválido");
+        }
 
         $stmt = $pdo->prepare("REPLACE INTO access_insight_workspaces (workspace_id, data_json) VALUES (?, ?)");
         $stmt->execute([$global_id, $json]);
