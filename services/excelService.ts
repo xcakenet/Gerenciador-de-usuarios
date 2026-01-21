@@ -4,8 +4,8 @@ import { ImportPreviewRow, User } from '../types';
 import { getCompanyForUser } from '../utils/formatters';
 
 const cleanString = (val: any): string => {
-  if (typeof val !== 'string') return String(val || '').trim();
-  return val.trim();
+  if (val === null || val === undefined) return '';
+  return String(val).trim();
 };
 
 export const parseExcelFile = async (file: File): Promise<ImportPreviewRow[]> => {
@@ -19,36 +19,47 @@ export const parseExcelFile = async (file: File): Promise<ImportPreviewRow[]> =>
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet) as any[];
         
+        if (json.length === 0) {
+          resolve([]);
+          return;
+        }
+
         const normalized = json.map(row => {
           const keys = Object.keys(row);
           
+          // Função auxiliar para busca de chaves
           const findKey = (targets: string[]) => 
-            keys.find(k => targets.some(t => 
-              k.toLowerCase()
-               .normalize("NFD")
-               .replace(/[\u0300-\u036f]/g, "")
-               .includes(t.toLowerCase())
-            ));
+            keys.find(k => {
+              const normalizedK = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              return targets.some(t => normalizedK === t || normalizedK.includes(t));
+            });
 
-          // Mapeamento inteligente de colunas
-          const emailKey = findKey(['email', 'e-mail', 'correio', 'contato', 'usuario', 'login']);
-          const profileKey = findKey(['perfil', 'profile', 'acesso', 'atribuicao', 'permissao', 'nivel']);
-          const companyKey = findKey(['empresa', 'company', 'organizacao', 'corporacao', 'unidade', 'cliente']);
-          const rolesField = findKey(['roles', 'regra', 'funcao', 'cargo']);
-          const apiKeyField = findKey(['apikey', 'api key', 'chave', 'appkey']);
-          const labelField = findKey(['label', 'nome exibicao', 'identificador', 'nome']);
+          // 1. Identificar Identificador (Email ou Key)
+          const emailKey = findKey(['email', 'e-mail', 'login', 'usuario', 'identifier', 'identificador']);
+          const apiKeyKey = findKey(['apikey', 'api key', 'chave', 'appkey']);
+          
+          // 2. Identificar Nome
+          const nameKey = findKey(['nome', 'name', 'label', 'exibicao', 'full name']);
+          
+          // 3. Identificar Perfil (Atribuição)
+          const profileKey = findKey(['perfil', 'profile', 'acesso', 'atribuicao', 'permissao', 'nivel', 'role', 'regra']);
+          
+          // 4. Identificar Empresa
+          const companyKey = findKey(['empresa', 'company', 'organizacao', 'corporacao', 'unidade', 'cliente', 'organization']);
 
-          const emailValue = cleanString(row[emailKey || '']);
-          const apiKeyValue = cleanString(row[apiKeyField || '']);
+          const emailVal = cleanString(row[emailKey || ''] || row[apiKeyKey || '']);
+          const nameVal = cleanString(row[nameKey || '']);
+          const profileVal = cleanString(row[profileKey || '']);
+          const companyVal = cleanString(row[companyKey || '']);
 
+          // Fallbacks de segurança: se não tem nome, usa o email. Se não tem perfil, tenta achar qualquer outra coluna útil
           return {
-            email: emailValue || 'N/A',
-            name: cleanString(row[labelField || '']) || 'N/A', 
-            profile: cleanString(row[profileKey || '']) || 'Sem Perfil',
-            company: cleanString(row[companyKey || '']) || undefined,
-            apiKey: apiKeyValue || undefined,
-            label: cleanString(row[labelField || '']) || undefined,
-            roles: cleanString(row[rolesField || '']) || undefined,
+            email: emailVal || 'desconhecido@sistema.com',
+            name: nameVal || (emailVal && !emailVal.includes('@') ? emailVal : ''),
+            profile: profileVal || 'Acesso Padrão',
+            company: companyVal || undefined,
+            apiKey: cleanString(row[apiKeyKey || '']) || undefined,
+            roles: profileVal || undefined // Backup para o App.tsx
           };
         });
 
@@ -76,10 +87,6 @@ export const exportUsersToExcel = (users: User[]) => {
 
   const worksheet = XLSX.utils.json_to_sheet(exportData);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Usuários e Perfis");
-
-  const wscols = [{wch: 30}, {wch: 40}, {wch: 20}, {wch: 20}, {wch: 25}, {wch: 25}];
-  worksheet['!cols'] = wscols;
-
-  XLSX.writeFile(workbook, `relatorio_acessos_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio");
+  XLSX.writeFile(workbook, `access_report_${Date.now()}.xlsx`);
 };
