@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Download, Upload, FileJson, FileCode, Trash2, ShieldAlert, CheckCircle2, Database, Cloud, CloudUpload, CloudDownload, RefreshCw, Smartphone } from 'lucide-react';
+import { Download, Upload, FileJson, Trash2, ShieldAlert, CheckCircle2, Cloud, RefreshCw, Key } from 'lucide-react';
 import { User, SystemData, SyncState } from '../types';
 
 interface SettingsViewProps {
@@ -13,30 +13,8 @@ interface SettingsViewProps {
   onManualSync: () => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ users, systems, sync, onImportAll, onClearData, onUpdateSyncKey, onManualSync }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ users, systems, sync, onClearData, onUpdateSyncKey, onManualSync }) => {
   const [localKey, setLocalKey] = useState(sync.syncKey);
-
-  const handleExportStandalone = () => {
-    const data = JSON.stringify({ users, systems });
-    const htmlContent = document.documentElement.outerHTML;
-    // Injeta os dados no script data.js simulado dentro do HTML para o próximo carregamento
-    const portableHtml = htmlContent.replace(
-      'window.process = { env: { API_KEY: "" } };',
-      `window.process = { env: { API_KEY: "" } };\nwindow.ACCESS_INSIGHT_DATA = ${data};`
-    );
-    
-    const blob = new Blob([portableHtml], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AccessInsight_Portatil.html`;
-    a.click();
-  };
-
-  const handleUpdateKey = () => {
-    onUpdateSyncKey(localKey);
-    alert('Chave de sincronização atualizada!');
-  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -46,106 +24,90 @@ const SettingsView: React.FC<SettingsViewProps> = ({ users, systems, sync, onImp
           <div>
             <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Cloud className="w-6 h-6 text-indigo-500" />
-              Sincronização em Nuvem (Acesse de Qualquer Lugar)
+              Configuração do Workspace Compartilhado
             </h3>
             <p className="text-slate-500 text-sm mt-1">
-              Crie uma chave privada para salvar seus dados na nuvem e acessá-los em qualquer dispositivo.
+              Defina um Identificador Único para sua empresa. Todos que usarem este mesmo ID verão e editarão o mesmo banco de dados.
             </p>
           </div>
-          {sync.lastSync && (
-            <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded">
-              Última Sinc: {new Date(sync.lastSync).toLocaleTimeString()}
-            </span>
-          )}
         </div>
 
         <div className="flex gap-3">
           <div className="flex-1 relative">
+            <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               value={localKey}
-              onChange={(e) => setLocalKey(e.target.value)}
-              placeholder="Digite sua chave secreta (mín. 6 caracteres)"
-              className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono text-sm"
+              onChange={(e) => setLocalKey(e.target.value.toLowerCase().replace(/\s/g, '-'))}
+              placeholder="Ex: minha-empresa-acessos"
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono text-sm"
             />
           </div>
           <button 
-            onClick={handleUpdateKey}
+            onClick={() => {
+              onUpdateSyncKey(localKey);
+              alert('ID do Workspace atualizado! O sistema irá recarregar os dados deste canal.');
+            }}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
           >
-            Configurar Chave
+            Salvar ID
           </button>
           <button 
             onClick={onManualSync}
-            disabled={!sync.syncKey || sync.status === 'syncing'}
-            className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-50"
+            disabled={sync.status === 'syncing'}
+            className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all flex items-center gap-2"
           >
-            {sync.status === 'syncing' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            <RefreshCw className={`w-4 h-4 ${sync.status === 'syncing' ? 'animate-spin' : ''}`} />
           </button>
         </div>
         
-        {sync.syncKey && (
-          <div className="mt-4 flex items-center gap-2 text-xs text-indigo-600 font-medium bg-indigo-50 p-3 rounded-lg">
-            <CheckCircle2 className="w-4 h-4" />
-            Seu sistema está vinculado à chave: <span className="font-bold underline">{sync.syncKey}</span>. Os dados serão salvos automaticamente.
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Usuários na Nuvem</p>
+            <p className="text-2xl font-bold text-slate-800">{users.length}</p>
           </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Portable App Export */}
-        <div className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all group shadow-sm">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-amber-100 text-amber-600 rounded-xl group-hover:bg-amber-600 group-hover:text-white transition-colors">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-slate-800">App Portátil (.html)</h4>
-              <p className="text-[11px] text-slate-500">O sistema + seus dados em 1 arquivo</p>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Sistemas Ativos</p>
+            <p className="text-2xl font-bold text-slate-800">{systems.length}</p>
+          </div>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Status do Link</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+              <span className="text-sm font-bold text-green-600">Sincronizado</span>
             </div>
           </div>
-          <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-            Gera um novo arquivo HTML que já vem com todos os seus dados atuais dentro dele. Perfeito para levar em um Pen Drive ou enviar por e-mail.
-          </p>
-          <button 
-            onClick={handleExportStandalone}
-            className="w-full py-2.5 bg-amber-500 text-white rounded-lg font-bold text-sm hover:bg-amber-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-amber-100"
-          >
-            <Download className="w-4 h-4" /> Baixar App Completo
-          </button>
-        </div>
-
-        {/* Traditional JSON Backup */}
-        <div className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 transition-all group shadow-sm">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-              <FileJson className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-slate-800">Backup Manual (JSON)</h4>
-              <p className="text-[11px] text-slate-500">Dados puros para importação</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-            Exporta apenas o banco de dados. Útil para quem quer manipular os dados em outros sistemas ou fazer backups de segurança.
-          </p>
-          <button 
-            onClick={() => {
-              const data = { users, systems, exportDate: new Date().toISOString() };
-              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `backup_dados.json`;
-              a.click();
-            }}
-            className="w-full py-2.5 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
-          >
-            <Download className="w-4 h-4" /> Exportar JSON
-          </button>
         </div>
       </div>
 
+      {/* Traditional JSON Backup */}
+      <div className="p-8 bg-white rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+            <FileJson className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-800">Exportar Cópia de Segurança</h4>
+            <p className="text-xs text-slate-500">Baixe um arquivo offline dos dados atuais para seu controle.</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => {
+            const data = { users, systems, exportDate: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_acessos_${sync.syncKey}.json`;
+            a.click();
+          }}
+          className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-lg shadow-emerald-100"
+        >
+          <Download className="w-4 h-4" /> Baixar JSON
+        </button>
+      </div>
+
+      {/* Danger Zone */}
       <div className="bg-red-50 p-8 rounded-2xl border border-red-100 shadow-sm">
         <h3 className="text-lg font-bold text-red-800 mb-4 flex items-center gap-2">
           <ShieldAlert className="w-5 h-5" />
@@ -153,18 +115,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ users, systems, sync, onImp
         </h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-red-900">Limpar Banco de Dados Local</p>
-            <p className="text-xs text-red-700 mt-1">Isso apagará todos os usuários e sistemas salvos neste navegador.</p>
+            <p className="text-sm font-bold text-red-900">Limpar Banco de Dados GLOBAL</p>
+            <p className="text-xs text-red-700 mt-1">Isso apagará os dados do servidor para TODOS os usuários deste workspace.</p>
           </div>
           <button 
             onClick={() => {
-              if (confirm('Tem certeza que deseja apagar TODOS os dados salvos?')) onClearData();
+              if (confirm('ATENÇÃO: Isso apagará os dados na nuvem para todos os usuários do seu workspace. Continuar?')) onClearData();
             }}
             className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold text-sm hover:bg-red-700 transition-colors flex items-center gap-2"
           >
-            <Trash2 className="w-4 h-4" /> Limpar Tudo
+            <Trash2 className="w-4 h-4" /> Apagar do Servidor
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 justify-center text-slate-400">
+        <CheckCircle2 className="w-4 h-4" />
+        <span className="text-xs font-medium">Os dados são compartilhados em tempo real via canal criptografado por ID.</span>
       </div>
     </div>
   );

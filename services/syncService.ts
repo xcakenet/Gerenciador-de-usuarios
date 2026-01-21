@@ -1,40 +1,42 @@
 
 import { User, SystemData } from '../types';
 
-// Usaremos uma API pública de KV (Key-Value) para persistência remota sem necessidade de backend próprio
-// O endpoint é baseado na chave do usuário para garantir "privacidade" por obscuridade
-const BASE_URL = 'https://api.jsonbin.io/v3/b';
-const MASTER_KEY = '$2a$10$7Z/Y.x7H.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.I.'; // Placeholder
+/**
+ * Para um ambiente compartilhado, usamos um bucket fixo.
+ * Em um cenário real de produção, aqui seria a URL da sua API backend.
+ * Para esta solução frontend-only, utilizaremos um serviço de KV Store 
+ * que permite persistência global via API.
+ */
+const KV_BUCKET_URL = 'https://kvdb.io/AnV9Bq8Y8zW7y2X7B8zW7y'; 
 
-// Nota: Como não temos um backend fixo, utilizaremos um serviço gratuito de KV Store
-// Para fins desta aplicação, usaremos o 'kvdb.io' que é simples e não requer conta para buckets públicos
-const KV_URL = 'https://kvdb.io/AnV9Bq8Y8zW7y2X7B8zW7y'; // Bucket público temporário para o exemplo
-
-export const saveToCloud = async (key: string, data: { users: User[], systems: SystemData[] }) => {
-  if (!key || key.length < 5) return null;
+export const saveToCloud = async (workspaceKey: string, data: { users: User[], systems: SystemData[] }) => {
+  if (!workspaceKey) return false;
   
   try {
-    const response = await fetch(`${KV_URL}/${key}`, {
+    const response = await fetch(`${KV_BUCKET_URL}/${workspaceKey}`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        updatedAt: new Date().toISOString()
+      }),
       headers: { 'Content-Type': 'application/json' }
     });
     return response.ok;
   } catch (error) {
-    console.error('Erro ao salvar na nuvem:', error);
+    console.error('Erro ao salvar no banco global:', error);
     return false;
   }
 };
 
-export const loadFromCloud = async (key: string) => {
-  if (!key || key.length < 5) return null;
+export const loadFromCloud = async (workspaceKey: string) => {
+  if (!workspaceKey) return null;
   
   try {
-    const response = await fetch(`${KV_URL}/${key}`);
+    const response = await fetch(`${KV_BUCKET_URL}/${workspaceKey}`);
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {
-    console.error('Erro ao carregar da nuvem:', error);
+    console.error('Erro ao carregar do banco global:', error);
     return null;
   }
 };
