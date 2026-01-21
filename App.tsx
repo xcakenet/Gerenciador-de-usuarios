@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -8,19 +9,28 @@ import SettingsView from './components/SettingsView';
 import { ViewState, User, SystemData, ImportPreviewRow, SyncState } from './types';
 import { formatNameFromEmail } from './utils/formatters';
 import { saveToCloud, loadFromCloud } from './services/syncService';
-import { Cloud, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Cloud, RefreshCw, AlertCircle, CheckCircle2, Link2, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [systems, setSystems] = useState<SystemData[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  // Fix: changed NodeJS.Timeout to any to resolve namespace error in browser environment
   const saveTimeoutRef = useRef<any>(null);
   
+  const getInitialSyncKey = () => {
+    const params = new URLSearchParams(window.location.search);
+    const urlKey = params.get('ws');
+    if (urlKey) {
+      localStorage.setItem('accessinsight_workspace_id', urlKey);
+      return urlKey;
+    }
+    return localStorage.getItem('accessinsight_workspace_id') || `ws-${window.location.hostname.replace(/\./g, '-')}`;
+  };
+
   const [sync, setSync] = useState<SyncState>({
     enabled: true,
-    syncKey: localStorage.getItem('accessinsight_workspace_id') || `ws-${window.location.hostname.replace(/\./g, '-')}`,
+    syncKey: getInitialSyncKey(),
     lastSync: localStorage.getItem('accessinsight_lastsync'),
     status: 'idle'
   });
@@ -30,6 +40,14 @@ const App: React.FC = () => {
     
     setSync(prev => ({ ...prev, status: 'syncing' }));
     try {
+      // Carrega backup local primeiro para velocidade
+      const localBackup = localStorage.getItem('accessinsight_users_backup');
+      if (localBackup) {
+        const parsed = JSON.parse(localBackup);
+        setUsers(parsed.users || []);
+        setSystems(parsed.systems || []);
+      }
+
       const remoteData = await loadFromCloud(sync.syncKey);
       
       if (remoteData && remoteData.users) {
@@ -53,13 +71,15 @@ const App: React.FC = () => {
   }, [fetchGlobalData]);
 
   const persistToCloud = useCallback(async (newUsers: User[], newSystems: SystemData[]) => {
+    // Salva localmente IMEDIATAMENTE para evitar perda de dados
+    localStorage.setItem('accessinsight_users_backup', JSON.stringify({ users: newUsers, systems: newSystems }));
+
     if (!sync.syncKey) return;
+    setSync(prev => ({ ...prev, status: 'syncing' }));
     
-    // Debounce para evitar múltiplas requisições rápidas ao importar
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     
     saveTimeoutRef.current = setTimeout(async () => {
-      setSync(prev => ({ ...prev, status: 'syncing' }));
       const success = await saveToCloud(sync.syncKey, { users: newUsers, systems: newSystems });
       
       if (success) {
@@ -68,16 +88,15 @@ const App: React.FC = () => {
         localStorage.setItem('accessinsight_lastsync', now);
       } else {
         setSync(prev => ({ ...prev, status: 'error' }));
-        // Tenta salvar localmente como fallback
-        localStorage.setItem('accessinsight_users_backup', JSON.stringify(newUsers));
       }
-    }, 1000);
+    }, 2000);
   }, [sync.syncKey]);
 
   const handleUpdateSyncKey = useCallback((key: string) => {
     setSync(prev => ({ ...prev, syncKey: key, status: 'idle' }));
     localStorage.setItem('accessinsight_workspace_id', key);
-    // Recarregar dados do novo workspace
+    const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?ws=' + key;
+    window.history.pushState({ path: newUrl }, '', newUrl);
     setIsInitialLoading(true);
   }, []);
 
@@ -100,7 +119,7 @@ const App: React.FC = () => {
   }, [persistToCloud]);
 
   const handleClearData = useCallback(() => {
-    if (confirm('Isso apagará permanentemente os dados do servidor para todos. Continuar?')) {
+    if (confirm('Atenção! Isso apagará todos os dados na nuvem. Continuar?')) {
       setUsers([]);
       setSystems([]);
       persistToCloud([], []);
@@ -109,9 +128,9 @@ const App: React.FC = () => {
 
   const handleImport = useCallback((systemName: string, data: ImportPreviewRow[]) => {
     const importedAt = new Date().toISOString();
-    
     const newSystems = [...systems];
     const systemIdx = newSystems.findIndex(s => s.name === systemName);
+    
     if (systemIdx > -1) {
       newSystems[systemIdx] = { ...newSystems[systemIdx], userCount: data.length, lastImport: importedAt };
     } else {
@@ -148,60 +167,62 @@ const App: React.FC = () => {
 
   if (isInitialLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white">
-        <RefreshCw className="w-12 h-12 animate-spin text-indigo-500 mb-4" />
-        <h1 className="text-xl font-bold">Iniciando Banco de Dados Global</h1>
-        <p className="text-slate-400 text-sm mt-2 font-mono">ID: {sync.syncKey}</p>
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white p-6">
+        <RefreshCw className="w-12 h-12 animate-spin text-indigo-500 mb-6" />
+        <h1 className="text-xl font-bold">Autenticando na Hostinger...</h1>
+        <p className="text-slate-500 font-mono text-xs mt-2 italic">{sync.syncKey}</p>
       </div>
     );
   }
 
   return (
     <Layout activeView={activeView} onNavigate={setActiveView}>
-      {/* Barra de Status Global Otimizada */}
-      <div className="mb-6 flex items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="mb-6 flex flex-col sm:flex-row items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-xl transition-colors ${
-            sync.status === 'error' ? 'bg-red-50 text-red-500' : 
+          <div className={`p-3 rounded-xl transition-all ${
+            sync.status === 'error' ? 'bg-amber-50 text-amber-500' : 
             sync.status === 'syncing' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'
           }`}>
-            <Cloud className={`w-6 h-6 ${sync.status === 'syncing' ? 'animate-pulse' : ''}`} />
+            {sync.status === 'error' ? <WifiOff className="w-6 h-6" /> : <Cloud className={`w-6 h-6 ${sync.status === 'syncing' ? 'animate-pulse' : ''}`} />}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-slate-800">Servidor Compartilhado</p>
+              <p className="text-sm font-bold text-slate-800">
+                {sync.status === 'error' ? 'Trabalhando em Modo Local' : 'Nuvem Conectada'}
+              </p>
               {sync.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
             </div>
-            <p className="text-[11px] font-mono text-slate-400">Canal: {sync.syncKey}</p>
+            <p className="text-[10px] text-slate-400 font-mono">Workspace: {sync.syncKey}</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-6">
-          <div className="text-right hidden sm:block">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronização</p>
-            <p className="text-xs font-semibold text-slate-600">
-              {sync.status === 'syncing' ? 'Enviando dados...' : 
-               sync.status === 'error' ? 'Falha na conexão' : 
-               sync.lastSync ? `Hoje às ${new Date(sync.lastSync).toLocaleTimeString()}` : 'Nunca sincronizado'}
-            </p>
-          </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => {
+              const url = window.location.origin + window.location.pathname + '?ws=' + sync.syncKey;
+              navigator.clipboard.writeText(url);
+              alert('Link copiado! Use este link em outros computadores para ver os mesmos dados.');
+            }}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Link Compartilhável
+          </button>
           <button 
             onClick={fetchGlobalData}
-            disabled={sync.status === 'syncing'}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-100"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${sync.status === 'syncing' ? 'animate-spin' : ''}`} />
-            Atualizar Tudo
+            Sincronizar Agora
           </button>
         </div>
       </div>
 
       {sync.status === 'error' && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700 animate-in slide-in-from-top-2">
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-800">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <div className="text-sm">
-            <p className="font-bold">Erro de Sincronização!</p>
-            <p className="opacity-80">Verifique se o seu servidor permite conexões externas ou tente mudar o ID do Workspace nas Configurações.</p>
+            <p className="font-bold">Aviso: Sincronização Pausada</p>
+            <p className="opacity-80">Seus dados estão seguros no navegador. O erro de sincronização pode ser causado por restrições de rede na Hostinger ou ID de workspace inválido. Tente usar uma chave apenas com letras e números.</p>
           </div>
         </div>
       )}
