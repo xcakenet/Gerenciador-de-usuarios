@@ -6,26 +6,33 @@ import UsersView from './components/UsersView';
 import ImportView from './components/ImportView';
 import InsightsView from './components/InsightsView';
 import SettingsView from './components/SettingsView';
-import { ViewState, User, SystemData, ImportPreviewRow, SyncState } from './types';
+import { ViewState, User, SystemData, ImportPreviewRow } from './types';
 import { formatNameFromEmail } from './utils/formatters';
 import { saveToCloud, loadFromCloud } from './services/syncService';
-import { Database, CheckCircle2, WifiOff, AlertCircle, RefreshCcw } from 'lucide-react';
+import { Database, CheckCircle2, WifiOff, AlertCircle, RefreshCcw, Lock, Unlock, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [systems, setSystems] = useState<SystemData[]>([]);
+  const [password, setPassword] = useState<string>('admin123');
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error' | 'success'>('idle');
+  const [showPasswordModal, setShowPasswordModal] = useState<{ target: ViewState } | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  
   const saveTimeoutRef = useRef<any>(null);
 
   const fetchGlobalData = useCallback(async () => {
     setSyncStatus('syncing');
     try {
       const remoteData = await loadFromCloud();
-      if (remoteData && remoteData.users) {
-        setUsers(remoteData.users);
+      if (remoteData) {
+        setUsers(remoteData.users || []);
         setSystems(remoteData.systems || []);
+        if (remoteData.password) setPassword(remoteData.password);
         setSyncStatus('success');
       } else {
         setSyncStatus('error');
@@ -43,41 +50,46 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchGlobalData]);
 
-  const persistToCloud = useCallback(async (newUsers: User[], newSystems: SystemData[]) => {
+  const persistToCloud = useCallback(async (newUsers: User[], newSystems: SystemData[], newPassword?: string) => {
     setSyncStatus('syncing');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     
     saveTimeoutRef.current = setTimeout(async () => {
-      const success = await saveToCloud({ users: newUsers, systems: newSystems });
+      const success = await saveToCloud({ 
+        users: newUsers, 
+        systems: newSystems, 
+        password: newPassword || password 
+      });
       setSyncStatus(success ? 'success' : 'error');
     }, 800);
-  }, []);
+  }, [password]);
 
-  const handleDeleteUser = useCallback((email: string) => {
-    const updated = users.filter(u => u.email !== email);
-    setUsers(updated);
-    persistToCloud(updated, systems);
-  }, [users, systems, persistToCloud]);
-
-  const handleUpdateUser = useCallback((oldEmail: string, updatedData: Partial<User>) => {
-    const updated = users.map(u => u.email === oldEmail ? { ...u, ...updatedData } : u);
-    setUsers(updated);
-    persistToCloud(updated, systems);
-  }, [users, systems, persistToCloud]);
-
-  const handleImportAll = useCallback((newUsers: User[], newSystems: SystemData[]) => {
-    setUsers(newUsers);
-    setSystems(newSystems);
-    persistToCloud(newUsers, newSystems);
-  }, [persistToCloud]);
-
-  const handleClearData = useCallback(() => {
-    if (confirm('Zerar toda a base MySQL corporativa?')) {
-      setUsers([]);
-      setSystems([]);
-      persistToCloud([], []);
+  const handleNavigate = (view: ViewState) => {
+    const protectedViews: ViewState[] = ['import', 'settings'];
+    if (protectedViews.includes(view) && !isUnlocked) {
+      setShowPasswordModal({ target: view });
+    } else {
+      setActiveView(view);
     }
-  }, [persistToCloud]);
+  };
+
+  const handleUnlock = () => {
+    if (passwordInput === password) {
+      setIsUnlocked(true);
+      setActiveView(showPasswordModal?.target || 'dashboard');
+      setShowPasswordModal(null);
+      setPasswordInput('');
+      setPasswordError(false);
+    } else {
+      setPasswordError(true);
+      setTimeout(() => setPasswordError(false), 2000);
+    }
+  };
+
+  const updatePassword = (newPass: string) => {
+    setPassword(newPass);
+    persistToCloud(users, systems, newPass);
+  };
 
   const handleImport = useCallback((systemName: string, data: ImportPreviewRow[]) => {
     const importedAt = new Date().toISOString();
@@ -101,11 +113,9 @@ const App: React.FC = () => {
       if (existingIdx > -1) {
         const currentUser = updatedUsers[existingIdx];
         const otherAccesses = currentUser.accesses.filter(a => a.systemName !== systemName);
-        
         updatedUsers[existingIdx] = { 
           ...currentUser, 
           accesses: [...otherAccesses, newAccess],
-          // Só atualiza Nome e Empresa se o novo dado for válido e o antigo for genérico
           name: (row.name && row.name !== 'N/A' && (currentUser.name.includes('@') || currentUser.name === 'N/A')) ? row.name : currentUser.name,
           company: (row.company && row.company !== 'N/A') ? row.company : currentUser.company
         };
@@ -135,7 +145,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <Layout activeView={activeView} onNavigate={setActiveView}>
+    <Layout activeView={activeView} onNavigate={handleNavigate} isUnlocked={isUnlocked}>
+      {/* Header Info */}
       <div className="mb-6 flex flex-col sm:flex-row items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl ${syncStatus === 'error' ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}`}>
@@ -148,13 +159,21 @@ const App: React.FC = () => {
             </p>
           </div>
         </div>
-        <button onClick={fetchGlobalData} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2">
-          <RefreshCcw className="w-3.5 h-3.5" /> Atualizar
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {isUnlocked && (
+            <button onClick={() => setIsUnlocked(false)} className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5" /> Bloquear
+            </button>
+          )}
+          <button onClick={fetchGlobalData} className="flex-1 sm:flex-none px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100">
+            <RefreshCcw className="w-3.5 h-3.5" /> Atualizar
+          </button>
+        </div>
       </div>
 
+      {/* Views */}
       {activeView === 'dashboard' && <Dashboard users={users} systems={systems} />}
-      {activeView === 'users' && <UsersView users={users} onDeleteUser={handleDeleteUser} onUpdateUser={handleUpdateUser} />}
+      {activeView === 'users' && <UsersView users={users} onDeleteUser={(e) => { const u = users.filter(u=>u.email!==e); setUsers(u); persistToCloud(u, systems); }} onUpdateUser={(e, d) => { const u = users.map(u=>u.email===e?{...u,...d}:u); setUsers(u); persistToCloud(u, systems); }} />}
       {activeView === 'import' && <ImportView onImportComplete={handleImport} />}
       {activeView === 'insights' && <InsightsView users={users} />}
       {activeView === 'settings' && (
@@ -162,11 +181,57 @@ const App: React.FC = () => {
           users={users} 
           systems={systems} 
           sync={{ status: syncStatus, syncKey: 'Global', enabled: true, lastSync: null }}
-          onImportAll={handleImportAll} 
-          onClearData={handleClearData} 
+          currentPassword={password}
+          onUpdatePassword={updatePassword}
+          onImportAll={(u, s) => { setUsers(u); setSystems(s); persistToCloud(u, s); }} 
+          onClearData={() => { if(confirm('Zerar MySQL?')) { setUsers([]); setSystems([]); persistToCloud([], []); } }} 
           onUpdateSyncKey={() => {}} 
           onManualSync={fetchGlobalData}
         />
+      )}
+
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-slate-800">Área Restrita</h3>
+              <p className="text-sm text-slate-500 mt-2">Insira a senha mestra para acessar as configurações e importações.</p>
+              
+              <div className="mt-8 space-y-4">
+                <input 
+                  type="password" 
+                  autoFocus
+                  placeholder="Senha de acesso"
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-center font-bold text-lg outline-none transition-all ${
+                    passwordError ? 'border-red-500 bg-red-50 text-red-600 ring-4 ring-red-100' : 'border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50'
+                  }`}
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                />
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setShowPasswordModal(null)}
+                    className="flex-1 py-3.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleUnlock}
+                    className="flex-1 py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-100"
+                  >
+                    Entrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );
