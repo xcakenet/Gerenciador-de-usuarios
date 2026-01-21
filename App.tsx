@@ -91,36 +91,43 @@ const App: React.FC = () => {
     persistToCloud(users, systems, newPass);
   };
 
-  const handleImport = useCallback((systemName: string, data: ImportPreviewRow[]) => {
+  const handleImport = useCallback((manualSystemName: string, data: ImportPreviewRow[]) => {
     const importedAt = new Date().toISOString();
-    const newSystems = [...systems];
-    const systemIdx = newSystems.findIndex(s => s.name === systemName);
-    
-    if (systemIdx > -1) {
-      newSystems[systemIdx] = { ...newSystems[systemIdx], userCount: data.length, lastImport: importedAt };
-    } else {
-      newSystems.push({ id: Date.now().toString(), name: systemName, userCount: data.length, lastImport: importedAt });
-    }
+    const currentUsers = [...users];
+    const currentSystemsMap = new Map(systems.map(s => [s.name.toLowerCase(), s]));
 
-    const updatedUsers = [...users];
     data.forEach(row => {
       let identifier = row.email?.trim().toLowerCase();
       if (!identifier || identifier === 'n/a') return;
 
-      const existingIdx = updatedUsers.findIndex(u => u.email.toLowerCase() === identifier.toLowerCase());
-      const newAccess = { systemName, profile: row.profile || 'Acesso Padrão', importedAt };
+      // Decide qual o nome do sistema para esta linha específica
+      const finalSystemName = (row.systemName || manualSystemName || 'Sistema Indefinido').trim();
+      const systemKey = finalSystemName.toLowerCase();
 
-      if (existingIdx > -1) {
-        const currentUser = updatedUsers[existingIdx];
-        const otherAccesses = currentUser.accesses.filter(a => a.systemName !== systemName);
-        updatedUsers[existingIdx] = { 
-          ...currentUser, 
+      // Atualiza contador de usuários por sistema no estado global de sistemas
+      if (!currentSystemsMap.has(systemKey)) {
+        currentSystemsMap.set(systemKey, { id: Date.now().toString() + Math.random(), name: finalSystemName, userCount: 0, lastImport: importedAt });
+      }
+      
+      const systemData = currentSystemsMap.get(systemKey)!;
+      systemData.lastImport = importedAt;
+
+      const existingUserIdx = currentUsers.findIndex(u => u.email.toLowerCase() === identifier);
+      const newAccess = { systemName: finalSystemName, profile: row.profile || 'Acesso Padrão', importedAt };
+
+      if (existingUserIdx > -1) {
+        const user = currentUsers[existingUserIdx];
+        // Remove acesso antigo ao mesmo sistema se existir, para não duplicar dentro do usuário
+        const otherAccesses = user.accesses.filter(a => a.systemName.toLowerCase() !== systemKey);
+        
+        currentUsers[existingUserIdx] = { 
+          ...user, 
           accesses: [...otherAccesses, newAccess],
-          name: (row.name && row.name !== 'N/A' && (currentUser.name.includes('@') || currentUser.name === 'N/A')) ? row.name : currentUser.name,
-          company: (row.company && row.company !== 'N/A') ? row.company : currentUser.company
+          name: (row.name && row.name !== 'N/A' && (user.name.includes('@') || user.name === 'N/A')) ? row.name : user.name,
+          company: (row.company && row.company !== 'N/A') ? row.company : user.company
         };
       } else {
-        updatedUsers.push({
+        currentUsers.push({
           email: identifier,
           name: (row.name && row.name !== 'N/A') ? row.name : formatNameFromEmail(identifier),
           company: (row.company && row.company !== 'N/A') ? row.company : undefined,
@@ -129,9 +136,15 @@ const App: React.FC = () => {
       }
     });
 
-    setUsers(updatedUsers);
-    setSystems(newSystems);
-    persistToCloud(updatedUsers, newSystems);
+    // Recalcula contagem de usuários por sistema após a importação massiva
+    const finalSystems = Array.from(currentSystemsMap.values()).map(s => {
+      const count = currentUsers.filter(u => u.accesses.some(a => a.systemName.toLowerCase() === s.name.toLowerCase())).length;
+      return { ...s, userCount: count };
+    });
+
+    setUsers(currentUsers);
+    setSystems(finalSystems);
+    persistToCloud(currentUsers, finalSystems);
     setActiveView('users');
   }, [users, systems, persistToCloud]);
 

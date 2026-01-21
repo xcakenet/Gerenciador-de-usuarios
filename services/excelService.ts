@@ -35,7 +35,7 @@ export const parseExcelFile = async (file: File): Promise<ImportPreviewRow[]> =>
             });
 
           // 1. Identificar Identificador (Email ou Key)
-          const emailKey = findKey(['email', 'e-mail', 'login', 'usuario', 'identifier', 'identificador']);
+          const emailKey = findKey(['email', 'e-mail', 'login', 'usuario', 'identifier', 'identificador', 'identificador/email']);
           const apiKeyKey = findKey(['apikey', 'api key', 'chave', 'appkey']);
           
           // 2. Identificar Nome
@@ -47,19 +47,23 @@ export const parseExcelFile = async (file: File): Promise<ImportPreviewRow[]> =>
           // 4. Identificar Empresa
           const companyKey = findKey(['empresa', 'company', 'organizacao', 'corporacao', 'unidade', 'cliente', 'organization']);
 
+          // 5. Identificar Sistema (Novo: busca por coluna de sistema na planilha)
+          const systemKey = findKey(['sistema', 'system', 'plataforma', 'platform', 'app']);
+
           const emailVal = cleanString(row[emailKey || ''] || row[apiKeyKey || '']);
           const nameVal = cleanString(row[nameKey || '']);
           const profileVal = cleanString(row[profileKey || '']);
           const companyVal = cleanString(row[companyKey || '']);
+          const systemVal = cleanString(row[systemKey || '']);
 
-          // Fallbacks de segurança: se não tem nome, usa o email. Se não tem perfil, tenta achar qualquer outra coluna útil
           return {
             email: emailVal || 'desconhecido@sistema.com',
             name: nameVal || (emailVal && !emailVal.includes('@') ? emailVal : ''),
             profile: profileVal || 'Acesso Padrão',
+            systemName: systemVal || undefined,
             company: companyVal || undefined,
             apiKey: cleanString(row[apiKeyKey || '']) || undefined,
-            roles: profileVal || undefined // Backup para o App.tsx
+            roles: profileVal || undefined
           };
         });
 
