@@ -1,8 +1,10 @@
 
-import React from 'react';
-import { Users, Server, FileText, TrendingUp } from 'lucide-react';
+import React, { useMemo } from 'react';
+// Added missing CheckCircle import from lucide-react
+import { Users, Server, FileText, TrendingUp, AlertTriangle, ShieldCheck, CheckCircle } from 'lucide-react';
 import { User, SystemData } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { performLocalAnalysis } from '../services/analysisEngine';
 
 interface DashboardProps {
   users: User[];
@@ -10,11 +12,13 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
+  const localInsights = useMemo(() => performLocalAnalysis(users), [users]);
+  
   const stats = [
     { label: 'Total de Usuários', value: users.length, icon: Users, color: 'indigo' },
     { label: 'Sistemas Conectados', value: systems.length, icon: Server, color: 'blue' },
     { label: 'Importações Realizadas', value: systems.length, icon: FileText, color: 'emerald' },
-    { label: 'Cruzamento de Perfis', value: users.reduce((acc, u) => acc + u.accesses.length, 0), icon: TrendingUp, color: 'amber' },
+    { label: 'Cruzamentos Totais', value: users.reduce((acc, u) => acc + u.accesses.length, 0), icon: TrendingUp, color: 'amber' },
   ];
 
   const chartData = systems.map(s => ({ name: s.name, count: s.userCount }));
@@ -37,9 +41,9 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Chart 1: Distribution */}
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
           <h4 className="text-lg font-bold text-slate-800 mb-6">Usuários por Sistema</h4>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -61,28 +65,45 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
           </div>
         </div>
 
-        {/* Chart 2: Summary Stats */}
+        {/* Security Summary (Offline/Local) */}
         <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-          <h4 className="text-lg font-bold text-slate-800 mb-6">Status dos Sistemas</h4>
+          <h4 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-indigo-600" />
+            Saúde dos Acessos
+          </h4>
           <div className="flex-1 space-y-4">
-            {systems.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400">
-                Aguardando importações...
+            {localInsights.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center gap-2">
+                <CheckCircle className="w-12 h-12 text-emerald-100" />
+                <p className="text-sm">Nenhum risco detectado nas planilhas atuais.</p>
               </div>
             ) : (
-              systems.map((sys, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full`} style={{backgroundColor: COLORS[idx % COLORS.length]}}></div>
-                    <span className="font-semibold text-slate-700">{sys.name}</span>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <span className="text-sm text-slate-500">{sys.userCount} usuários</span>
-                    <span className="text-xs text-slate-400">Última atualização: {new Date(sys.lastImport).toLocaleDateString()}</span>
+              localInsights.map((insight, idx) => (
+                <div key={idx} className={`p-4 rounded-xl border flex items-start gap-3 ${
+                  insight.type === 'danger' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'
+                }`}>
+                  <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${
+                    insight.type === 'danger' ? 'text-red-500' : 'text-amber-500'
+                  }`} />
+                  <div>
+                    <p className={`text-sm font-bold ${
+                      insight.type === 'danger' ? 'text-red-800' : 'text-amber-800'
+                    }`}>{insight.title}</p>
+                    <p className="text-[11px] text-slate-600 mt-1">{insight.description}</p>
                   </div>
                 </div>
               ))
             )}
+            
+            <div className="mt-6 pt-6 border-t border-slate-100">
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-2">Resumo dos Sistemas</p>
+              {systems.slice(0, 3).map((sys, idx) => (
+                <div key={idx} className="flex items-center justify-between py-1 text-xs">
+                  <span className="text-slate-600 font-medium">{sys.name}</span>
+                  <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{sys.userCount}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
