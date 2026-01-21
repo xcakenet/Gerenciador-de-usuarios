@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, Mail, Shield, ChevronRight, User as UserIcon, Trash2, AlertTriangle, Building2, Briefcase, FileDown, Users as UsersIcon, Key, Pencil, Check, X, ArrowLeft } from 'lucide-react';
+import { Search, Filter, Mail, Shield, ChevronRight, User as UserIcon, Trash2, AlertTriangle, Building2, Briefcase, FileDown, Users as UsersIcon, Key, Pencil, Check, X, ArrowLeft, Server } from 'lucide-react';
 import { User } from '../types';
 import { getCompanyForUser } from '../utils/formatters';
 import { exportUsersToExcel } from '../services/excelService';
@@ -15,6 +15,7 @@ const UsersView: React.FC<UsersViewProps> = ({ users, onDeleteUser, onUpdateUser
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [selectedProfile, setSelectedProfile] = useState<string>('all');
+  const [selectedSystem, setSelectedSystem] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -33,20 +34,23 @@ const UsersView: React.FC<UsersViewProps> = ({ users, onDeleteUser, onUpdateUser
     }
   }, [selectedUser]);
 
-  const { companies, profiles } = useMemo(() => {
+  const { companies, profiles, systemsList } = useMemo(() => {
     const companiesSet = new Set<string>();
     const profilesSet = new Set<string>();
+    const systemsSet = new Set<string>();
     
     users.forEach(user => {
       companiesSet.add(getCompanyForUser(user));
       user.accesses.forEach(acc => {
         if (acc.profile) profilesSet.add(acc.profile);
+        if (acc.systemName) systemsSet.add(acc.systemName);
       });
     });
 
     return {
       companies: Array.from(companiesSet).sort(),
-      profiles: Array.from(profilesSet).sort()
+      profiles: Array.from(profilesSet).sort(),
+      systemsList: Array.from(systemsSet).sort()
     };
   }, [users]);
 
@@ -63,10 +67,13 @@ const UsersView: React.FC<UsersViewProps> = ({ users, onDeleteUser, onUpdateUser
         const matchesProfile = 
           selectedProfile === 'all' || u.accesses.some(acc => acc.profile === selectedProfile);
 
-        return matchesSearch && matchesCompany && matchesProfile;
+        const matchesSystem = 
+          selectedSystem === 'all' || u.accesses.some(acc => acc.systemName === selectedSystem);
+
+        return matchesSearch && matchesCompany && matchesProfile && matchesSystem;
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  }, [users, searchTerm, selectedCompany, selectedProfile]);
+  }, [users, searchTerm, selectedCompany, selectedProfile, selectedSystem]);
 
   const handleExport = () => {
     if (filteredUsers.length === 0) return;
@@ -116,27 +123,39 @@ const UsersView: React.FC<UsersViewProps> = ({ users, onDeleteUser, onUpdateUser
             </button>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <select
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white text-xs appearance-none cursor-pointer"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white text-[11px] font-medium appearance-none cursor-pointer h-10"
                 value={selectedCompany}
                 onChange={(e) => setSelectedCompany(e.target.value)}
               >
-                <option value="all">Todas as Empresas</option>
+                <option value="all">Empresas</option>
                 {companies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
-            <div className="flex-1 relative">
+            <div className="relative">
+              <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <select
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white text-[11px] font-medium appearance-none cursor-pointer h-10"
+                value={selectedSystem}
+                onChange={(e) => setSelectedSystem(e.target.value)}
+              >
+                <option value="all">Sistemas</option>
+                {systemsList.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div className="relative">
               <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <select
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white text-xs appearance-none cursor-pointer"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white text-[11px] font-medium appearance-none cursor-pointer h-10"
                 value={selectedProfile}
                 onChange={(e) => setSelectedProfile(e.target.value)}
               >
-                <option value="all">Todos os Perfis</option>
+                <option value="all">Perfis</option>
                 {profiles.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
@@ -147,12 +166,12 @@ const UsersView: React.FC<UsersViewProps> = ({ users, onDeleteUser, onUpdateUser
               <UsersIcon className="w-3 h-3" />
               {filteredUsers.length} encontrados
             </div>
-            {(searchTerm || selectedCompany !== 'all' || selectedProfile !== 'all') && (
+            {(searchTerm || selectedCompany !== 'all' || selectedProfile !== 'all' || selectedSystem !== 'all') && (
               <button 
-                onClick={() => {setSearchTerm(''); setSelectedCompany('all'); setSelectedProfile('all');}}
+                onClick={() => {setSearchTerm(''); setSelectedCompany('all'); setSelectedProfile('all'); setSelectedSystem('all');}}
                 className="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold uppercase underline"
               >
-                Limpar
+                Limpar filtros
               </button>
             )}
           </div>
