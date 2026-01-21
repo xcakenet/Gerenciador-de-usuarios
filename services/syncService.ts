@@ -1,6 +1,7 @@
 
 import { User, SystemData } from '../types';
 
+// Usamos caminho relativo para garantir que funcione em subdiretórios na Hostinger
 const API_URL = './api.php';
 
 export const saveToCloud = async (data: { users: User[], systems: SystemData[] }) => {
@@ -14,25 +15,43 @@ export const saveToCloud = async (data: { users: User[], systems: SystemData[] }
     const response = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Falha no Servidor (POST):', response.status, errorData);
+      return false;
+    }
+
     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('Erro ao salvar no MySQL:', error);
+    console.error('Erro de Rede/Conexão (POST):', error);
     return false;
   }
 };
 
 export const loadFromCloud = async () => {
   try {
-    const response = await fetch(API_URL);
-    if (!response.ok) return null;
-    return await response.json();
+    const response = await fetch(`${API_URL}?t=${Date.now()}`, { // Cache-busting
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Falha no Servidor (GET):', response.status, errorData);
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
   } catch (error) {
-    console.error('Erro ao carregar do MySQL:', error);
+    console.error('Erro de Rede/Conexão (GET):', error);
     return null;
   }
 };
