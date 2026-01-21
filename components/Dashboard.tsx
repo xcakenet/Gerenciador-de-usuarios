@@ -1,6 +1,5 @@
 
 import React, { useMemo } from 'react';
-// Added missing CheckCircle import from lucide-react
 import { Users, Server, FileText, TrendingUp, AlertTriangle, ShieldCheck, CheckCircle } from 'lucide-react';
 import { User, SystemData } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -21,12 +20,14 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
     { label: 'Cruzamentos Totais', value: users.reduce((acc, u) => acc + u.accesses.length, 0), icon: TrendingUp, color: 'amber' },
   ];
 
-  const chartData = systems.map(s => ({ name: s.name, count: s.userCount }));
+  const chartData = systems.length > 0 
+    ? systems.map(s => ({ name: s.name, count: s.userCount }))
+    : [{ name: 'Nenhum Dado', count: 0 }];
+
   const COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 
   return (
     <div className="space-y-8">
-      {/* Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
@@ -42,20 +43,19 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Chart 1: Distribution */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm min-h-[450px]">
           <h4 className="text-lg font-bold text-slate-800 mb-6">Usuários por Sistema</h4>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
+          <div className="h-80 w-full relative">
+            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                 <Tooltip 
                   cursor={{fill: '#f8fafc'}}
                   contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
                 />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={40}>
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -65,7 +65,6 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
           </div>
         </div>
 
-        {/* Security Summary (Offline/Local) */}
         <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
           <h4 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-indigo-600" />
@@ -73,9 +72,9 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
           </h4>
           <div className="flex-1 space-y-4">
             {localInsights.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center gap-2">
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center gap-2 py-8">
                 <CheckCircle className="w-12 h-12 text-emerald-100" />
-                <p className="text-sm">Nenhum risco detectado nas planilhas atuais.</p>
+                <p className="text-sm">Nenhum risco detectado.</p>
               </div>
             ) : (
               localInsights.map((insight, idx) => (
@@ -94,16 +93,6 @@ const Dashboard: React.FC<DashboardProps> = ({ users, systems }) => {
                 </div>
               ))
             )}
-            
-            <div className="mt-6 pt-6 border-t border-slate-100">
-              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-2">Resumo dos Sistemas</p>
-              {systems.slice(0, 3).map((sys, idx) => (
-                <div key={idx} className="flex items-center justify-between py-1 text-xs">
-                  <span className="text-slate-600 font-medium">{sys.name}</span>
-                  <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{sys.userCount}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>
