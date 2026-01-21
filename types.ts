@@ -24,6 +24,7 @@ export interface ImportPreviewRow {
   email: string;
   name: string;
   profile: string;
+  company?: string;
   apiKey?: string;
   label?: string;
   roles?: string;

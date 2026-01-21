@@ -39,7 +39,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchGlobalData();
-    // Atualização automática a cada 30 segundos para manter navegadores sincronizados
     const interval = setInterval(fetchGlobalData, 30000);
     return () => clearInterval(interval);
   }, [fetchGlobalData]);
@@ -100,14 +99,22 @@ const App: React.FC = () => {
       const existingIdx = updatedUsers.findIndex(u => u.email.toLowerCase() === identifier.toLowerCase());
       const newAccess = { systemName, profile: row.profile || 'Sem Perfil', importedAt };
 
+      // Identifica a empresa com prioridade: Coluna Empresa > Coluna Regra/Cargo > Domínio Email
+      const detectedCompany = row.company || row.roles || undefined;
+
       if (existingIdx > -1) {
         const filtered = updatedUsers[existingIdx].accesses.filter(a => a.systemName !== systemName);
-        updatedUsers[existingIdx] = { ...updatedUsers[existingIdx], accesses: [...filtered, newAccess] };
+        updatedUsers[existingIdx] = { 
+          ...updatedUsers[existingIdx], 
+          accesses: [...filtered, newAccess],
+          company: detectedCompany || updatedUsers[existingIdx].company,
+          name: row.name !== 'N/A' ? row.name : updatedUsers[existingIdx].name
+        };
       } else {
         updatedUsers.push({
           email: identifier,
-          name: formatNameFromEmail(identifier),
-          company: row.roles || undefined,
+          name: row.name !== 'N/A' ? row.name : formatNameFromEmail(identifier),
+          company: detectedCompany,
           accesses: [newAccess]
         });
       }
@@ -131,7 +138,6 @@ const App: React.FC = () => {
 
   return (
     <Layout activeView={activeView} onNavigate={setActiveView}>
-      {/* Status Bar */}
       <div className="mb-6 flex flex-col sm:flex-row items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl transition-all ${

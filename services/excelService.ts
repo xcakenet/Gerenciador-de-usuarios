@@ -30,19 +30,22 @@ export const parseExcelFile = async (file: File): Promise<ImportPreviewRow[]> =>
                .includes(t.toLowerCase())
             ));
 
-          const emailKey = findKey(['email', 'e-mail', 'correio', 'contato']);
-          const profileKey = findKey(['perfil', 'profile', 'atribuição', 'atribuicao', 'cargo', 'role', 'acesso']);
+          // Mapeamento inteligente de colunas
+          const emailKey = findKey(['email', 'e-mail', 'correio', 'contato', 'usuario', 'login']);
+          const profileKey = findKey(['perfil', 'profile', 'acesso', 'atribuicao', 'permissao', 'nivel']);
+          const companyKey = findKey(['empresa', 'company', 'organizacao', 'corporacao', 'unidade', 'cliente']);
+          const rolesField = findKey(['roles', 'regra', 'funcao', 'cargo']);
           const apiKeyField = findKey(['apikey', 'api key', 'chave', 'appkey']);
-          const labelField = findKey(['label', 'nome exibicao', 'identificador']);
-          const rolesField = findKey(['roles', 'regra', 'funcao']);
+          const labelField = findKey(['label', 'nome exibicao', 'identificador', 'nome']);
 
           const emailValue = cleanString(row[emailKey || '']);
           const apiKeyValue = cleanString(row[apiKeyField || '']);
 
           return {
             email: emailValue || 'N/A',
-            name: 'N/A', 
+            name: cleanString(row[labelField || '']) || 'N/A', 
             profile: cleanString(row[profileKey || '']) || 'Sem Perfil',
+            company: cleanString(row[companyKey || '']) || undefined,
             apiKey: apiKeyValue || undefined,
             label: cleanString(row[labelField || '']) || undefined,
             roles: cleanString(row[rolesField || '']) || undefined,
