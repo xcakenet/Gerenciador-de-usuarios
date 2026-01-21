@@ -6,10 +6,10 @@ import UsersView from './components/UsersView';
 import ImportView from './components/ImportView';
 import InsightsView from './components/InsightsView';
 import SettingsView from './components/SettingsView';
-import { ViewState, User, SystemData, ImportPreviewRow } from './types';
+import { ViewState, User, SystemData, ImportPreviewRow, SyncState } from './types';
 import { formatNameFromEmail } from './utils/formatters';
+import { saveToCloud, loadFromCloud } from './services/syncService';
 
-// Estendendo o objeto Window para reconhecer dados externos
 declare global {
   interface Window {
     ACCESS_INSIGHT_DATA?: {
@@ -23,11 +23,16 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [systems, setSystems] = useState<SystemData[]>([]);
+  const [sync, setSync] = useState<SyncState>({
+    enabled: false,
+    syncKey: localStorage.getItem('accessinsight_synckey') || '',
+    lastSync: localStorage.getItem('accessinsight_lastsync'),
+    status: 'idle'
+  });
 
-  // Inicialização: Prioriza script externo -> localStorage -> vazio
+  // 1. Inicialização (Local -> Script Externo)
   useEffect(() => {
     if (window.ACCESS_INSIGHT_DATA) {
-      console.log('Dados carregados via script externo data.js');
       setUsers(window.ACCESS_INSIGHT_DATA.users);
       setSystems(window.ACCESS_INSIGHT_DATA.systems);
     } else {
@@ -38,20 +43,73 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Persistência local automática
+  // 2. Sincronização em Nuvem (Ao carregar chave ou iniciar app)
+  useEffect(() => {
+    const initCloudSync = async () => {
+      if (sync.syncKey && sync.syncKey.length >= 6) {
+        setSync(prev => ({ ...prev, status: 'syncing' }));
+        const remoteData = await loadFromCloud(sync.syncKey);
+        if (remoteData && remoteData.users) {
+          // Merge inteligente ou substituição? Por segurança, vamos substituir se os dados remotos forem mais novos
+          setUsers(remoteData.users);
+          setSystems(remoteData.systems);
+          setSync(prev => ({ ...prev, status: 'success', lastSync: new Date().toISOString() }));
+        } else {
+          setSync(prev => ({ ...prev, status: 'idle' }));
+        }
+      }
+    };
+    initCloudSync();
+  }, [sync.syncKey]);
+
+  // 3. Auto-Save (LocalStorage e Nuvem)
   useEffect(() => {
     localStorage.setItem('accessinsight_users', JSON.stringify(users));
     localStorage.setItem('accessinsight_systems', JSON.stringify(systems));
-  }, [users, systems]);
+
+    const timeout = setTimeout(async () => {
+      if (sync.syncKey && sync.syncKey.length >= 6 && users.length > 0) {
+        setSync(prev => ({ ...prev, status: 'syncing' }));
+        const success = await saveToCloud(sync.syncKey, { users, systems });
+        if (success) {
+          const now = new Date().toISOString();
+          setSync(prev => ({ ...prev, status: 'success', lastSync: now }));
+          localStorage.setItem('accessinsight_lastsync', now);
+        } else {
+          setSync(prev => ({ ...prev, status: 'error' }));
+        }
+      }
+    }, 2000); // Delay para não sobrecarregar a rede em cada clique
+
+    return () => clearTimeout(timeout);
+  }, [users, systems, sync.syncKey]);
+
+  const handleUpdateSyncKey = useCallback((key: string) => {
+    setSync(prev => ({ ...prev, syncKey: key }));
+    localStorage.setItem('accessinsight_synckey', key);
+  }, []);
+
+  const handleManualSync = useCallback(async () => {
+    if (!sync.syncKey) return;
+    setSync(prev => ({ ...prev, status: 'syncing' }));
+    const remoteData = await loadFromCloud(sync.syncKey);
+    if (remoteData) {
+      setUsers(remoteData.users);
+      setSystems(remoteData.systems);
+      setSync(prev => ({ ...prev, status: 'success', lastSync: new Date().toISOString() }));
+    } else {
+      // Se não tem na nuvem, sobe os locais
+      await saveToCloud(sync.syncKey, { users, systems });
+      setSync(prev => ({ ...prev, status: 'success', lastSync: new Date().toISOString() }));
+    }
+  }, [sync.syncKey, users, systems]);
 
   const handleDeleteUser = useCallback((email: string) => {
     setUsers(prev => prev.filter(u => u.email !== email));
   }, []);
 
   const handleUpdateUser = useCallback((oldEmail: string, updatedData: Partial<User>) => {
-    setUsers(prev => prev.map(u => 
-      u.email === oldEmail ? { ...u, ...updatedData } : u
-    ));
+    setUsers(prev => prev.map(u => u.email === oldEmail ? { ...u, ...updatedData } : u));
   }, []);
 
   const handleImportAll = useCallback((newUsers: User[], newSystems: SystemData[]) => {
@@ -62,8 +120,8 @@ const App: React.FC = () => {
   const handleClearData = useCallback(() => {
     setUsers([]);
     setSystems([]);
-    localStorage.removeItem('accessinsight_users');
-    localStorage.removeItem('accessinsight_systems');
+    localStorage.clear();
+    setSync({ enabled: false, syncKey: '', lastSync: null, status: 'idle' });
   }, []);
 
   const handleImport = useCallback((systemName: string, data: ImportPreviewRow[]) => {
@@ -79,82 +137,54 @@ const App: React.FC = () => {
 
     setUsers(prev => {
       const updatedUsers = [...prev];
-      
       data.forEach(row => {
-        let identifier = '';
-        let userName = '';
-        let userCompany = undefined;
-
+        let identifier = row.email?.trim().toLowerCase();
         if (row.apiKey && row.apiKey.toLowerCase().startsWith('vtexappkey')) {
           identifier = row.apiKey;
-          userName = row.label || 'App Key s/ Label';
-          userCompany = row.roles || 'VTEX Role';
-        } else {
-          const email = row.email?.trim().toLowerCase();
-          if (!email || email === 'n/a') return;
-          identifier = email;
-          userName = formatNameFromEmail(email);
         }
+        if (!identifier || identifier === 'n/a') return;
 
         const existingUserIndex = updatedUsers.findIndex(u => u.email.toLowerCase() === identifier.toLowerCase());
-        
-        const newAccess = {
-          systemName,
-          profile: row.profile || 'Sem Perfil',
-          importedAt
-        };
+        const newAccess = { systemName, profile: row.profile || 'Sem Perfil', importedAt };
 
         if (existingUserIndex > -1) {
           const filteredAccesses = updatedUsers[existingUserIndex].accesses.filter(a => a.systemName !== systemName);
           updatedUsers[existingUserIndex] = {
             ...updatedUsers[existingUserIndex],
-            name: userName, 
-            company: userCompany || updatedUsers[existingUserIndex].company,
             accesses: [...filteredAccesses, newAccess]
           };
         } else {
           updatedUsers.push({
             email: identifier,
-            name: userName,
-            company: userCompany,
+            name: formatNameFromEmail(identifier),
+            company: row.roles || undefined,
             accesses: [newAccess]
           });
         }
       });
-
       return updatedUsers;
     });
 
     setActiveView('users');
   }, []);
 
-  const renderView = () => {
-    switch (activeView) {
-      case 'dashboard':
-        return <Dashboard users={users} systems={systems} />;
-      case 'users':
-        return <UsersView users={users} onDeleteUser={handleDeleteUser} onUpdateUser={handleUpdateUser} />;
-      case 'import':
-        return <ImportView onImportComplete={handleImport} />;
-      case 'insights':
-        return <InsightsView users={users} />;
-      case 'settings':
-        return (
-          <SettingsView 
-            users={users} 
-            systems={systems} 
-            onImportAll={handleImportAll} 
-            onClearData={handleClearData} 
-          />
-        );
-      default:
-        return <Dashboard users={users} systems={systems} />;
-    }
-  };
-
   return (
     <Layout activeView={activeView} onNavigate={setActiveView}>
-      {renderView()}
+      {activeView === 'dashboard' && <Dashboard users={users} systems={systems} />}
+      {activeView === 'users' && <UsersView users={users} onDeleteUser={handleDeleteUser} onUpdateUser={handleUpdateUser} />}
+      {activeView === 'import' && <ImportView onImportComplete={handleImport} />}
+      {activeView === 'insights' && <InsightsView users={users} />}
+      {activeView === 'settings' && (
+        <SettingsView 
+          users={users} 
+          systems={systems} 
+          sync={sync}
+          onImportAll={handleImportAll} 
+          onClearData={handleClearData} 
+          onUpdateSyncKey={handleUpdateSyncKey}
+          onManualSync={handleManualSync}
+        />
+      )}
     </Layout>
   );
 };

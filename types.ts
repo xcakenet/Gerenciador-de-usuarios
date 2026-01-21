@@ -30,4 +30,11 @@ export interface ImportPreviewRow {
   [key: string]: any;
 }
 
+export interface SyncState {
+  enabled: boolean;
+  syncKey: string;
+  lastSync: string | null;
+  status: 'idle' | 'syncing' | 'error' | 'success';
+}
+
 export type ViewState = 'dashboard' | 'users' | 'import' | 'insights' | 'settings';
