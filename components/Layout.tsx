@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Users, FileUp, ShieldCheck, Database } from 'lucide-react';
+import { LayoutDashboard, Users, FileUp, ShieldCheck, Database, Settings } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface LayoutProps {
@@ -15,6 +15,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onNavigate }) => 
     { id: 'users' as ViewState, label: 'Usuários', icon: Users },
     { id: 'import' as ViewState, label: 'Importar Planilha', icon: FileUp },
     { id: 'insights' as ViewState, label: 'IA Insights', icon: ShieldCheck },
+    { id: 'settings' as ViewState, label: 'Configurações', icon: Settings },
   ];
 
   return (

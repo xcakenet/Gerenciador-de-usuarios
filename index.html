@@ -5,20 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AccessInsight Pro</title>
-    <!-- Favicon inline para evitar erro 404 e ícone customizado -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
     
-    <!-- Script para silenciar o aviso de 'produção' do Tailwind CDN e preparar o ambiente -->
+    <!-- Script de dados externo (Opcional - Criado via aba Configurações) -->
+    <script src="data.js" onerror="console.log('Nenhum script de dados externo detectado. Usando armazenamento local.')"></script>
+
     <script>
       (function() {
-        // Mock do objeto process para evitar erros ReferenceError fora do ambiente Node/Vite
         window.process = { env: { API_KEY: "" } };
-
         const originalWarn = console.warn;
         console.warn = function(...args) {
-          if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
-            return;
-          }
+          if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
           originalWarn.apply(console, args);
         };
       })();
@@ -46,7 +43,6 @@
 </head>
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
-    <!-- Ponto de entrada crucial para a aplicação carregar -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>

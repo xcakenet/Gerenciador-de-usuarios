@@ -5,21 +5,40 @@ import Dashboard from './components/Dashboard';
 import UsersView from './components/UsersView';
 import ImportView from './components/ImportView';
 import InsightsView from './components/InsightsView';
+import SettingsView from './components/SettingsView';
 import { ViewState, User, SystemData, ImportPreviewRow } from './types';
 import { formatNameFromEmail } from './utils/formatters';
+
+// Estendendo o objeto Window para reconhecer dados externos
+declare global {
+  interface Window {
+    ACCESS_INSIGHT_DATA?: {
+      users: User[];
+      systems: SystemData[];
+    };
+  }
+}
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [systems, setSystems] = useState<SystemData[]>([]);
 
+  // Inicialização: Prioriza script externo -> localStorage -> vazio
   useEffect(() => {
-    const savedUsers = localStorage.getItem('accessinsight_users');
-    const savedSystems = localStorage.getItem('accessinsight_systems');
-    if (savedUsers) setUsers(JSON.parse(savedUsers));
-    if (savedSystems) setSystems(JSON.parse(savedSystems));
+    if (window.ACCESS_INSIGHT_DATA) {
+      console.log('Dados carregados via script externo data.js');
+      setUsers(window.ACCESS_INSIGHT_DATA.users);
+      setSystems(window.ACCESS_INSIGHT_DATA.systems);
+    } else {
+      const savedUsers = localStorage.getItem('accessinsight_users');
+      const savedSystems = localStorage.getItem('accessinsight_systems');
+      if (savedUsers) setUsers(JSON.parse(savedUsers));
+      if (savedSystems) setSystems(JSON.parse(savedSystems));
+    }
   }, []);
 
+  // Persistência local automática
   useEffect(() => {
     localStorage.setItem('accessinsight_users', JSON.stringify(users));
     localStorage.setItem('accessinsight_systems', JSON.stringify(systems));
@@ -33,6 +52,18 @@ const App: React.FC = () => {
     setUsers(prev => prev.map(u => 
       u.email === oldEmail ? { ...u, ...updatedData } : u
     ));
+  }, []);
+
+  const handleImportAll = useCallback((newUsers: User[], newSystems: SystemData[]) => {
+    setUsers(newUsers);
+    setSystems(newSystems);
+  }, []);
+
+  const handleClearData = useCallback(() => {
+    setUsers([]);
+    setSystems([]);
+    localStorage.removeItem('accessinsight_users');
+    localStorage.removeItem('accessinsight_systems');
   }, []);
 
   const handleImport = useCallback((systemName: string, data: ImportPreviewRow[]) => {
@@ -54,7 +85,6 @@ const App: React.FC = () => {
         let userName = '';
         let userCompany = undefined;
 
-        // Regra de Identificação
         if (row.apiKey && row.apiKey.toLowerCase().startsWith('vtexappkey')) {
           identifier = row.apiKey;
           userName = row.label || 'App Key s/ Label';
@@ -108,6 +138,15 @@ const App: React.FC = () => {
         return <ImportView onImportComplete={handleImport} />;
       case 'insights':
         return <InsightsView users={users} />;
+      case 'settings':
+        return (
+          <SettingsView 
+            users={users} 
+            systems={systems} 
+            onImportAll={handleImportAll} 
+            onClearData={handleClearData} 
+          />
+        );
       default:
         return <Dashboard users={users} systems={systems} />;
     }

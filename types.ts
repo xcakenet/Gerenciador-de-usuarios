@@ -9,7 +9,7 @@ export interface User {
   email: string;
   name: string;
   accesses: Access[];
-  company?: string; // Empresa definida manualmente (ex: via roles da VTEX)
+  company?: string;
   department?: string;
 }
 
@@ -30,4 +30,4 @@ export interface ImportPreviewRow {
   [key: string]: any;
 }
 
-export type ViewState = 'dashboard' | 'users' | 'import' | 'insights';
+export type ViewState = 'dashboard' | 'users' | 'import' | 'insights' | 'settings';

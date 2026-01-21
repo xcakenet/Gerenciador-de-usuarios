@@ -14,7 +14,8 @@ export const analyzeAccessData = async (users: User[]) => {
     };
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // Initializing GenAI client according to strict guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const summary = users.map(u => ({
     email: u.email,
@@ -29,8 +30,9 @@ export const analyzeAccessData = async (users: User[]) => {
   Dados: ${JSON.stringify(summary)}`;
 
   try {
+    // Upgrading to gemini-3-pro-preview for complex reasoning task (security audit)
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -63,6 +65,7 @@ export const analyzeAccessData = async (users: User[]) => {
       }
     });
 
+    // Accessing .text property directly instead of text() method
     return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
