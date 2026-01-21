@@ -1,15 +1,9 @@
 
 import { User, SystemData } from '../types';
 
-/**
- * Bridge para o Banco de Dados MySQL (Hostinger)
- * O arquivo api.php deve estar na mesma pasta ou URL base do app.
- */
 const API_URL = './api.php';
 
-export const saveToCloud = async (workspaceKey: string, data: { users: User[], systems: SystemData[] }) => {
-  if (!workspaceKey) return false;
-  
+export const saveToCloud = async (data: { users: User[], systems: SystemData[] }) => {
   try {
     const payload = {
       users: data.users,
@@ -17,45 +11,28 @@ export const saveToCloud = async (workspaceKey: string, data: { users: User[], s
       updatedAt: new Date().toISOString()
     };
 
-    const response = await fetch(`${API_URL}?ws=${workspaceKey}`, {
+    const response = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
-      headers: { 
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) {
-      console.error('MySQL Bridge recusou a gravação:', response.status);
-      return false;
-    }
-
+    if (!response.ok) return false;
     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('Falha ao conectar com o MySQL Bridge:', error);
+    console.error('Erro ao salvar no MySQL:', error);
     return false;
   }
 };
 
-export const loadFromCloud = async (workspaceKey: string) => {
-  if (!workspaceKey) return null;
-  
+export const loadFromCloud = async () => {
   try {
-    const response = await fetch(`${API_URL}?ws=${workspaceKey}`);
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log('Workspace novo no MySQL.');
-        return null;
-      }
-      return null;
-    }
-    
-    const result = await response.json();
-    return result;
+    const response = await fetch(API_URL);
+    if (!response.ok) return null;
+    return await response.json();
   } catch (error) {
-    console.warn('Banco MySQL offline ou api.php não configurado.');
+    console.error('Erro ao carregar do MySQL:', error);
     return null;
   }
 };
