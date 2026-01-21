@@ -2,42 +2,38 @@
 import { User, SystemData } from '../types';
 
 /**
- * Armazenamento Centralizado via JSONStorage.net
- * Este serviço é ideal para aplicações na Hostinger pois permite 
- * criar 'buckets' nomeados instantaneamente.
+ * Bridge para o Banco de Dados MySQL (Hostinger)
+ * O arquivo api.php deve estar na mesma pasta ou URL base do app.
  */
-const API_URL = 'https://api.jsonstorage.net/v1/json';
+const API_URL = './api.php';
 
 export const saveToCloud = async (workspaceKey: string, data: { users: User[], systems: SystemData[] }) => {
   if (!workspaceKey) return false;
   
   try {
-    const payload = JSON.stringify({
+    const payload = {
       users: data.users,
       systems: data.systems,
-      updatedAt: new Date().toISOString(),
-      workspace: workspaceKey
-    });
+      updatedAt: new Date().toISOString()
+    };
 
-    // Tentamos salvar. O JSONStorage aceita PUT para criar/atualizar se tivermos uma chave de API, 
-    // mas para uso público/aberto, usamos uma estrutura de URL que ele entenda.
-    // Usaremos uma abordagem de 'Public Bin' baseada na sua chave única.
-    const response = await fetch(`${API_URL}/${workspaceKey}?apiKey=anonymous`, {
-      method: 'PUT',
-      body: payload,
+    const response = await fetch(`${API_URL}?ws=${workspaceKey}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
       headers: { 
         'Content-Type': 'application/json'
       }
     });
 
     if (!response.ok) {
-      console.error('Erro na API de Nuvem:', response.status);
+      console.error('MySQL Bridge recusou a gravação:', response.status);
       return false;
     }
 
-    return true;
+    const result = await response.json();
+    return result.success === true;
   } catch (error) {
-    console.error('Erro de conexão física:', error);
+    console.error('Falha ao conectar com o MySQL Bridge:', error);
     return false;
   }
 };
@@ -46,11 +42,11 @@ export const loadFromCloud = async (workspaceKey: string) => {
   if (!workspaceKey) return null;
   
   try {
-    const response = await fetch(`${API_URL}/${workspaceKey}`);
+    const response = await fetch(`${API_URL}?ws=${workspaceKey}`);
     
     if (!response.ok) {
-      if (response.status === 404 || response.status === 400) {
-        console.log('Workspace novo. Criando espaço ao salvar pela primeira vez...');
+      if (response.status === 404) {
+        console.log('Workspace novo no MySQL.');
         return null;
       }
       return null;
@@ -59,7 +55,7 @@ export const loadFromCloud = async (workspaceKey: string) => {
     const result = await response.json();
     return result;
   } catch (error) {
-    console.warn('Conexão com a nuvem bloqueada ou offline.');
+    console.warn('Banco MySQL offline ou api.php não configurado.');
     return null;
   }
 };
