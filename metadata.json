@@ -1,0 +1,5 @@
+{
+  "name": "Gerenciamento de Usuarios",
+  "description": "Uma plataforma avançada para análise e consolidação de perfis de usuários em múltiplos sistemas, permitindo o cruzamento inteligente de dados de planilhas Excel e insights via IA.",
+  "requestFramePermissions": []
+}
